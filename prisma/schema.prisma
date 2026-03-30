@@ -1,0 +1,127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RepoFrequency {
+  EVERY_1_HOUR
+  EVERY_2_HOURS
+  EVERY_4_HOURS
+  EVERY_6_HOURS
+  EVERY_8_HOURS
+  EVERY_12_HOURS
+  DAILY
+}
+
+enum RepoStatus {
+  ACTIVE
+  PAUSED
+}
+
+enum ActivityStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model User {
+  id            String      @id @default(cuid())
+  name          String?
+  email         String?     @unique
+  emailVerified DateTime?
+  image         String?
+  passwordHash  String?
+  githubLogin   String?     @unique
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  accounts      Account[]
+  sessions      Session[]
+  trackedRepos  TrackedRepo[]
+  activityLogs  ActivityLog[]
+}
+
+model Account {
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([provider, providerAccountId])
+}
+
+model Session {
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String
+  expires    DateTime
+
+  @@id([identifier, token])
+}
+
+model TrackedRepo {
+  id                     String         @id @default(cuid())
+  userId                 String
+  user                   User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repoUrl                String
+  repoOwner              String
+  repoName               String
+  defaultBranch          String?
+  encryptedPat           String
+  patIv                  String
+  patTag                 String
+  frequency              RepoFrequency  @default(DAILY)
+  status                 RepoStatus     @default(ACTIVE)
+  commitMessageTemplate  String         @default("chore(autostreak): contribution for {{date}}")
+  fileContentTemplate    String         @default("AutoStreak contribution for {{isoTimestamp}}\\n\\nQuote: {{quote}}")
+  totalCommits           Int            @default(0)
+  lastCommitAt           DateTime?
+  lastRateLimitRemaining Int?
+  lastRateLimitResetAt   DateTime?
+  createdAt              DateTime       @default(now())
+  updatedAt              DateTime       @updatedAt
+  logs                   ActivityLog[]
+
+  @@unique([userId, repoOwner, repoName], name: "user_repo_unique")
+  @@index([userId, status])
+}
+
+model ActivityLog {
+  id        String       @id @default(cuid())
+  repoId    String
+  userId    String
+  status    ActivityStatus
+  message   String
+  commitSha String?
+  createdAt DateTime     @default(now())
+
+  repo TrackedRepo @relation(fields: [repoId], references: [id], onDelete: Cascade)
+  user User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([repoId, createdAt])
+  @@index([userId, createdAt])
+}
